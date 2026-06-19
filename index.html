@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#05080d">
+    <title>MotionSwing — AI Controller</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --accent: #00ffcc;
+            --accent2: #ff3e6c;
+            --accent-rgb: 0,255,204;
+            --accent2-rgb: 255,62,108;
+            --bg: #080c12;
+            --panel: rgba(10, 18, 30, 0.92);
+            --border: rgba(0, 255, 204, 0.18);
+            --text: #e0f4ef;
+            --muted: rgba(180,220,210,0.5);
+            --font-display: 'Orbitron', monospace;
+            --font-body: 'Sarabun', sans-serif;
+        }
+        html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; font-family:var(--font-body); color:var(--text); }
+        #gameContainer { position:relative; width:100vw; height:100vh; }
+        #video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+        #video.mirror { transform:scaleX(-1); }
+        #hiddenCanvas { display:none; }
+        #gameCanvas { position:absolute; inset:0; width:100%; height:100%; }
+
+        /* ===== SPLASH (cinematic boot) ===== */
+        #splash {
+            position:absolute; inset:0;
+            display:flex; align-items:center; justify-content:center;
+            background:
+                radial-gradient(ellipse 90% 65% at 50% 36%, rgba(var(--accent-rgb),0.12), transparent 60%),
+                radial-gradient(ellipse 75% 55% at 50% 104%, rgba(var(--accent2-rgb),0.16), transparent 70%),
+                #05080d;
+            z-index:50; overflow:hidden;
+        }
+        #splash::after {
+            content:""; position:absolute; inset:0; pointer-events:none; z-index:6;
+            background:radial-gradient(ellipse 120% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
+        }
+
+        #splash .grid-floor {
+            position:absolute; left:50%; bottom:0;
+            width:240%; height:60%;
+            transform:translateX(-50%) perspective(340px) rotateX(74deg);
+            transform-origin:bottom center;
+            background-image:
+                linear-gradient(rgba(var(--accent-rgb),0.40) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(var(--accent-rgb),0.40) 1px, transparent 1px);
+            background-size:48px 48px;
+            mask-image:linear-gradient(to top, #000 0%, transparent 82%);
+            -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 82%);
+            animation:grid-roll 3s linear infinite;
+            pointer-events:none;
+        }
+        @keyframes grid-roll { from{background-position:0 0} to{background-position:0 48px} }
+
+        #splash .halo {
+            position:absolute; top:42%; left:50%;
+            width:min(560px,86vw); aspect-ratio:1;
+            transform:translate(-50%,-50%);
+            border-radius:50%;
+            border:1px solid rgba(var(--accent-rgb),0.10);
+            box-shadow:0 0 80px rgba(var(--accent-rgb),0.06) inset;
+            pointer-events:none; z-index:1;
+        }
+        #splash .halo::before, #splash .halo::after {
+            content:""; position:absolute; inset:-1px; border-radius:50%;
+            border:1px solid transparent;
+        }
+        #splash .halo::before {
+            border-top-color:var(--accent);
+            border-right-color:rgba(var(--accent-rgb),0.3);
+            animation:orbit 7s linear infinite;
+        }
+        #splash .halo::after {
+            inset:34px;
+            border-bottom-color:var(--accent2);
+            border-left-color:rgba(var(--accent2-rgb),0.3);
+            animation:orbit 5s linear infinite reverse;
+        }
+        @keyframes orbit { to{transform:rotate(360deg)} }
+
+        #splash .pfx { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:2; }
+        #splash .pfx i {
+            position:absolute; bottom:-12px;
+            width:3px; height:3px; border-radius:50%;
+            background:var(--accent); box-shadow:0 0 8px var(--accent);
+            animation:rise linear infinite; opacity:0;
+        }
+        @keyframes rise {
+            0%{transform:translateY(0);opacity:0}
+            12%{opacity:0.9} 85%{opacity:0.6}
+            100%{transform:translateY(-82vh);opacity:0}
+        }
+
+        #splash .stage {
+            position:relative; z-index:4;
+            display:flex; flex-direction:column; align-items:center;
+            padding:0 20px;
+        }
+
+        #splash .badge {
+            display:inline-flex; align-items:center; gap:9px;
+            font-family:var(--font-display); font-size:0.54rem; font-weight:700;
+            letter-spacing:0.36em; text-transform:uppercase; color:var(--accent);
+            border:1px solid var(--border); background:rgba(var(--accent-rgb),0.05);
+            padding:6px 18px; border-radius:100px; margin-bottom:30px;
+            backdrop-filter:blur(6px);
+            opacity:0; transform:translateY(8px);
+            animation:fade-up 0.6s ease forwards; animation-delay:1.05s;
+        }
+        #splash .badge::before {
+            content:""; width:6px; height:6px; border-radius:50%;
+            background:var(--accent); box-shadow:0 0 8px var(--accent);
+            animation:live-blink 1.4s ease-in-out infinite;
+        }
+        @keyframes live-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+        #splash .logo-wrap {
+            position:relative; padding:22px 34px; overflow:hidden;
+        }
+        #splash .logo-wrap .br-c {
+            position:absolute; width:24px; height:24px;
+            border:2px solid var(--accent);
+            opacity:0; z-index:3;
+            animation:bracket-in 0.5s ease forwards;
+        }
+        #splash .logo-wrap .br-c.tl { top:0; left:0; border-right:0; border-bottom:0; animation-delay:0.55s; }
+        #splash .logo-wrap .br-c.tr { top:0; right:0; border-left:0; border-bottom:0; animation-delay:0.65s; }
+        #splash .logo-wrap .br-c.bl { bottom:0; left:0; border-right:0; border-top:0; animation-delay:0.75s; }
+        #splash .logo-wrap .br-c.br { bottom:0; right:0; border-left:0; border-top:0; animation-delay:0.85s; }
+        @keyframes bracket-in { from{opacity:0;transform:scale(1.4)} to{opacity:0.9;transform:scale(1)} }
+
+        #splash .logo {
+            position:relative;
+            font-family:var(--font-display);
+            font-size:clamp(2.6rem,10vw,6rem);
+            font-weight:900; line-height:0.9; letter-spacing:0.03em;
+            display:flex; justify-content:center;
+        }
+        #splash .logo .w1 { color:var(--text); text-shadow:0 0 24px rgba(224,244,239,0.22); }
+        #splash .logo .w2 {
+            color:var(--accent); position:relative;
+            animation:logo-glow 2.6s ease-in-out infinite; animation-delay:1.1s;
+        }
+
+        @keyframes logo-glow {
+            0%,100%{ text-shadow:0 0 22px rgba(var(--accent-rgb),0.4), 0 0 50px rgba(var(--accent-rgb),0.15) }
+            50%{ text-shadow:0 0 38px rgba(var(--accent-rgb),0.9), 0 0 90px rgba(var(--accent-rgb),0.4) }
+        }
+
+        #splash .wave {
+            margin-top:22px; width:min(360px,70vw); height:26px;
+            display:flex; align-items:center; justify-content:center; gap:3px;
+            opacity:0; animation:fade-up 0.6s ease forwards; animation-delay:1.2s;
+        }
+        #splash .wave span {
+            flex:1; max-width:5px; border-radius:2px;
+            background:linear-gradient(to top, var(--accent2), var(--accent));
+            animation:eq 1.1s ease-in-out infinite;
+        }
+        @keyframes eq { 0%,100%{height:18%} 50%{height:100%} }
+
+        #splash .sub {
+            font-family:var(--font-display);
+            font-size:0.7rem; color:var(--muted);
+            letter-spacing:0.46em; text-transform:uppercase;
+            margin-top:14px; margin-bottom:40px; padding-left:0.46em;
+            opacity:0; animation:fade-up 0.6s ease forwards; animation-delay:1.3s;
+        }
+
+        #startBtn {
+            position:relative; overflow:hidden;
+            font-size:0.98rem; padding:17px 56px; border-width:2px;
+            opacity:0; transform:translateY(10px);
+            animation:fade-up 0.6s ease forwards; animation-delay:1.45s;
+        }
+        #startBtn:hover { box-shadow:0 0 32px rgba(var(--accent-rgb),0.45); }
+
+        #splash .hint {
+            font-size:0.8rem; color:var(--muted);
+            max-width:400px; text-align:center; line-height:1.95;
+            margin-top:30px; z-index:4; position:relative;
+            opacity:0; animation:fade-up 0.6s ease forwards; animation-delay:1.6s;
+        }
+
+        @keyframes fade-up { to{opacity:1; transform:translateY(0)} }
+
+        #themePicker {
+            display:flex; align-items:center; gap:12px;
+            margin-top:34px; z-index:4; position:relative;
+            opacity:0; animation:fade-up 0.6s ease forwards; animation-delay:1.75s;
+        }
+        #themePicker .tp-label {
+            font-family:var(--font-display); font-size:0.5rem; font-weight:700;
+            letter-spacing:0.26em; text-transform:uppercase; color:var(--muted);
+        }
+        #themePicker .sw {
+            width:26px; height:26px; border-radius:50%;
+            border:2px solid rgba(255,255,255,0.18);
+            cursor:pointer; padding:0; position:relative;
+            transition:transform 0.15s ease, border-color 0.15s ease;
+            background:linear-gradient(135deg, var(--a) 0 50%, var(--b) 50% 100%);
+        }
+        #themePicker .sw:hover { transform:scale(1.18); }
+        #themePicker .sw.active {
+            border-color:#fff;
+            box-shadow:0 0 0 2px rgba(0,0,0,0.6), 0 0 14px rgba(255,255,255,0.4);
+        }
+
+        .btn { font-family:var(--font-display); font-size:0.82rem; font-weight:700; letter-spacing:0.14em; padding:12px 32px; border:1.5px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; border-radius:4px; transition:all 0.18s ease; text-transform:uppercase; }
+        .btn:hover { background:rgba(0,255,204,0.1); box-shadow:0 0 20px rgba(0,255,204,0.25); }
+        .btn:active { transform:scale(0.97); }
+        .btn-red { border-color:var(--accent2); color:var(--accent2); }
+        .btn-red:hover { background:rgba(255,62,108,0.1); box-shadow:0 0 20px rgba(255,62,108,0.25); }
+
+        #hud { position:absolute; inset:0; pointer-events:none; z-index:10; display:none; }
+        #hud.visible { display:block; }
+
+        #timerPanel {
+            position:absolute; top:20px; left:50%; transform:translateX(-50%);
+            background:var(--panel); border:1px solid var(--border);
+            border-radius:8px; padding:10px 28px; backdrop-filter:blur(12px);
+            text-align:center; pointer-events:auto;
+        }
+        #timerVal {
+            font-family:var(--font-display); font-size:1.9rem; font-weight:900;
+            color:var(--accent); letter-spacing:0.06em; line-height:1;
+        }
+        #timerVal.warn { color:#ffe000; animation:tick-warn 0.5s ease infinite alternate; }
+        #timerVal.danger { color:var(--accent2); animation:tick-warn 0.25s ease infinite alternate; }
+        @keyframes tick-warn { 0%{opacity:1} 100%{opacity:0.5} }
+
+        #scorePanel { position:absolute; top:20px; left:20px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px 22px; backdrop-filter:blur(12px); min-width:150px; }
+        .stat-label { font-family:var(--font-display); font-size:0.52rem; letter-spacing:0.22em; color:var(--muted); text-transform:uppercase; margin-bottom:2px; }
+        .stat-big { font-family:var(--font-display); font-size:2.4rem; font-weight:900; color:var(--accent); line-height:1; }
+        .stat-med { font-family:var(--font-display); font-size:1.2rem; font-weight:700; line-height:1; }
+        #comboVal { color:#fff; transition:color 0.2s; }
+        #comboVal.hot { color:var(--accent2) !important; animation:pop 0.25s ease; }
+        @keyframes pop { 0%{transform:scale(1.5)} 100%{transform:scale(1)} }
+
+        #statusPanel { position:absolute; top:20px; right:20px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px 20px; backdrop-filter:blur(12px); pointer-events:auto; display:flex; flex-direction:column; gap:10px; min-width:200px; }
+        #trackDot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#444; margin-right:8px; vertical-align:middle; transition:all 0.3s; }
+        #trackDot.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
+        #trackDot.lost { background:var(--accent2); box-shadow:0 0 8px var(--accent2); }
+
+        #calibRing { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:100px; height:100px; border:2px dashed var(--accent2); border-radius:50%; display:none; animation:spin 1.8s linear infinite; z-index:20; pointer-events:none; }
+        #calibRing.visible { display:block; }
+        @keyframes spin { from{transform:translate(-50%,-50%) rotate(0deg)} to{transform:translate(-50%,-50%) rotate(360deg)} }
+
+        #hitFlash { position:absolute; inset:0; background:rgba(0,255,204,0.07); pointer-events:none; opacity:0; z-index:5; }
+        #hitFlash.flash { animation:flash-out 0.35s ease forwards; }
+        @keyframes flash-out { 0%{opacity:1} 100%{opacity:0} }
+
+        .corner { position:absolute; width:22px; height:22px; border-color:rgba(0,255,204,0.35); border-style:solid; pointer-events:none; z-index:12; display:none; }
+        .corner.show { display:block; }
+        .tl{top:14px;left:14px;border-width:2px 0 0 2px}
+        .tr{top:14px;right:14px;border-width:2px 2px 0 0}
+        .bl{bottom:14px;left:14px;border-width:0 0 2px 2px}
+        .br{bottom:14px;right:14px;border-width:0 2px 2px 0}
+
+        #scanlines { position:absolute; inset:0; pointer-events:none; z-index:3; background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,rgba(0,0,0,0.06) 3px,rgba(0,0,0,0.06) 4px); display:none; }
+        #scanlines.show { display:block; }
+
+        #toastZone { position:absolute; bottom:30px; left:50%; transform:translateX(-50%); z-index:40; pointer-events:none; display:flex; flex-direction:column-reverse; align-items:center; gap:8px; }
+        .toast { font-family:var(--font-display); font-size:0.72rem; letter-spacing:0.14em; background:var(--panel); border:1px solid var(--border); border-radius:4px; padding:8px 22px; color:var(--accent); animation:toast-life 2.8s ease forwards; white-space:nowrap; }
+        @keyframes toast-life { 0%{opacity:0;transform:translateY(8px)} 12%{opacity:1;transform:translateY(0)} 75%{opacity:1} 100%{opacity:0;transform:translateY(-5px)} }
+
+        #gameOver {
+            position:absolute; inset:0;
+            background:rgba(8,12,18,0.93);
+            z-index:60;
+            display:none;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:0;
+            backdrop-filter:blur(8px);
+        }
+        #gameOver.show { display:flex; }
+        #gameOver .go-title {
+            font-family:var(--font-display);
+            font-size:clamp(1.8rem,6vw,3.2rem);
+            font-weight:900;
+            color:var(--accent2);
+            letter-spacing:0.1em;
+            text-shadow:0 0 40px rgba(255,62,108,0.6);
+            margin-bottom:6px;
+        }
+        #gameOver .go-score-box {
+            background:var(--panel);
+            border:1px solid var(--border);
+            border-radius:10px;
+            padding:22px 44px;
+            text-align:center;
+            margin-bottom:28px;
+        }
+        #gameOver .go-score-num {
+            font-family:var(--font-display);
+            font-size:3.5rem; font-weight:900;
+            color:var(--accent); line-height:1;
+        }
+        #gameOver .go-btns {
+            display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
+        }
+
+        @media (max-width: 680px) {
+            #scorePanel {
+                top:calc(10px + env(safe-area-inset-top));
+                left:calc(10px + env(safe-area-inset-left));
+                padding:10px 14px; min-width:0;
+            }
+            .stat-big { font-size:1.8rem; }
+            .stat-med { font-size:1rem; }
+
+            #statusPanel {
+                top:auto; right:auto;
+                left:50%; transform:translateX(-50%);
+                bottom:calc(8px + env(safe-area-inset-bottom));
+                flex-direction:row; flex-wrap:wrap;
+                align-items:center; justify-content:center;
+                gap:8px; min-width:0;
+                width:calc(100vw - 20px); max-width:520px;
+                padding:10px 12px;
+            }
+            #statusPanel > div:nth-child(2),
+            #statusPanel > div:nth-child(3),
+            #statusPanel > div:nth-child(4) { display:none; }
+            #calibBtn { flex:1 1 auto; min-height:46px; font-size:0.62rem; }
+            #flipBtn  { flex:0 0 auto; min-height:46px; }
+
+            .btn { min-height:46px; }
+
+            #splash .logo { font-size:clamp(2rem,12vw,3.4rem); }
+            #splash .hint { font-size:0.74rem; padding:0 8px; }
+            #themePicker .sw { width:30px; height:30px; }
+        }
+
+        #gameContainer { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:manipulation; }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="hiddenCanvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
+    <div id="scanlines"></div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div id="calibRing"></div>
+    <div id="hitFlash"></div>
+
+    <div id="hud">
+        <div id="scorePanel">
+            <div class="stat-label">Score</div>
+            <div class="stat-big" id="scoreVal">0</div>
+            <div style="margin-top:12px">
+                <div class="stat-label">Combo</div>
+                <div class="stat-med" id="comboVal">×0</div>
+            </div>
+        </div>
+
+        <div id="timerPanel">
+            <div style="font-family:var(--font-display);font-size:0.45rem;letter-spacing:0.22em;color:var(--muted);margin-bottom:3px">TIME</div>
+            <div id="timerVal">03:00</div>
+        </div>
+
+        <div id="statusPanel">
+            <div>
+                <span id="trackDot"></span>
+                <span id="statusText" style="font-size:0.78rem">ยังไม่ได้ล็อกสี</span>
+            </div>
+            <button class="btn btn-red" id="calibBtn"
+                style="font-size:0.62rem;padding:8px 12px;pointer-events:auto;letter-spacing:0.1em">
+                ⊕ LOCK COLOR
+            </button>
+            <button class="btn" id="flipBtn"
+                style="font-size:0.6rem;padding:7px 12px;pointer-events:auto;letter-spacing:0.08em">
+                ⟲ CAMERA
+            </button>
+        </div>
+    </div>
+
+    <div id="toastZone"></div>
+
+    <!-- SPLASH -->
+    <div id="splash">
+        <div class="grid-floor"></div>
+        <div class="halo"></div>
+        <div class="pfx" id="pfx"></div>
+
+        <div class="stage">
+            <span class="badge">AI Motion Controller</span>
+            <div class="logo-wrap">
+                <span class="br-c" style="top:0;left:0;border-right:0;border-bottom:0"></span>
+                <span class="br-c" style="top:0;right:0;border-left:0;border-bottom:0"></span>
+                <span class="br-c" style="bottom:0;left:0;border-right:0;border-top:0"></span>
+                <span class="br-c" style="bottom:0;right:0;border-left:0;border-top:0"></span>
+                <div class="logo">
+                    <span class="w1">MOTION</span><span class="w2">SWING</span>
+                </div>
+            </div>
+            <div class="wave" id="wave"></div>
+            <div class="sub">Swing to score</div>
+            <button class="btn" id="startBtn">
+                เปิดกล้อง / START
+            </button>
+            <p class="hint">
+                ใช้วัตถุสีสด (ลูกบอล ผ้า หรือปากกา)<br>
+                แล้วกด LOCK COLOR เพื่อเริ่มเล่น
+            </p>
+            <div id="themePicker">
+                <span class="tp-label">Theme</span>
+                <button class="sw" data-theme="aqua"   style="--a:#00ffcc;--b:#ff3e6c"></button>
+                <button class="sw" data-theme="violet" style="--a:#b14bff;--b:#00e0ff"></button>
+                <button class="sw" data-theme="amber"  style="--a:#ffb300;--b:#ff3b6b"></button>
+                <button class="sw" data-theme="lime"   style="--a:#aaff00;--b:#00b3ff"></button>
+                <button class="sw" data-theme="ice"    style="--a:#00b3ff;--b:#ff5ec4"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="gameOver">
+        <div class="go-title">จบเกม</div>
+        <div style="font-size:0.8rem;color:var(--muted);letter-spacing:0.18em;margin-bottom:32px">TIME'S UP</div>
+        <div class="go-score-box">
+            <div style="font-family:var(--font-display);font-size:0.5rem;letter-spacing:0.24em;color:var(--muted);text-transform:uppercase;margin-top:4px">FINAL SCORE</div>
+            <div class="go-score-num" id="goScoreNum">0</div>
+            <div style="font-family:var(--font-display);font-size:0.5rem;letter-spacing:0.24em;color:var(--muted);text-transform:uppercase;margin-top:10px">MAX COMBO</div>
+            <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--accent2)" id="goComboNum">×0</div>
+            <div style="font-family:var(--font-display);font-size:0.75rem;color:#ffe000;letter-spacing:0.12em;margin-top:10px" id="goRank"></div>
+        </div>
+        <div class="go-btns">
+            <button class="btn" id="replayBtn">▶ เล่นอีกครั้ง</button>
+        </div>
+    </div>
+
+</div>
+<script>
+// =====================================================
+// MotionSwing — AI Motion Controller v5
+// =====================================================
+
+(function spawnParticles(){
+    const pfx = document.getElementById("pfx");
+    if (!pfx || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const N = 22;
+    for (let i = 0; i < N; i++) {
+        const p = document.createElement("i");
+        p.style.left = Math.random() * 100 + "%";
+        const dur = 6 + Math.random() * 7;
+        p.style.animationDuration = dur + "s";
+        p.style.animationDelay = (-Math.random() * dur) + "s";
+        const s = 2 + Math.random() * 2;
+        p.style.width = p.style.height = s + "px";
+        pfx.appendChild(p);
+    }
+})();
+
+(function buildWave(){
+    const wave = document.getElementById("wave");
+    if (!wave) return;
+    const N = 40;
+    for (let i = 0; i < N; i++) {
+        const b = document.createElement("span");
+        b.style.animationDuration = (0.7 + Math.random() * 0.9) + "s";
+        b.style.animationDelay = (-Math.random() * 1.1) + "s";
+        wave.appendChild(b);
+    }
+})();
+
+const THEMES = {
+    aqua:   { a:"#00ffcc", aRgb:"0,255,204",   b:"#ff3e6c", bRgb:"255,62,108" },
+    violet: { a:"#b14bff", aRgb:"177,75,255",  b:"#00e0ff", bRgb:"0,224,255"  },
+    amber:  { a:"#ffb300", aRgb:"255,179,0",   b:"#ff3b6b", bRgb:"255,59,107" },
+    lime:   { a:"#aaff00", aRgb:"170,255,0",   b:"#00b3ff", bRgb:"0,179,255"  },
+    ice:    { a:"#00b3ff", aRgb:"0,179,255",   b:"#ff5ec4", bRgb:"255,94,196" },
+};
+
+function applyTheme(name) {
+    const t = THEMES[name]; if (!t) return;
+    const r = document.documentElement.style;
+    r.setProperty("--accent", t.a);
+    r.setProperty("--accent2", t.b);
+    r.setProperty("--accent-rgb", t.aRgb);
+    r.setProperty("--accent2-rgb", t.bRgb);
+    r.setProperty("--border", `rgba(${t.aRgb},0.18)`);
+    document.querySelectorAll("#themePicker .sw").forEach(s =>
+        s.classList.toggle("active", s.dataset.theme === name));
+}
+
+(function initThemePicker(){
+    const picker = document.getElementById("themePicker");
+    if (!picker) return;
+    picker.querySelectorAll(".sw").forEach(sw => {
+        sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
+    });
+    applyTheme("aqua");
+})();
+
+const video        = document.getElementById("video");
+const gameCanvas   = document.getElementById("gameCanvas");
+const ctx          = gameCanvas.getContext("2d");
+const hiddenCanvas = document.getElementById("hiddenCanvas");
+const hCtx         = hiddenCanvas.getContext("2d");
+
+const splash       = document.getElementById("splash");
+const hud          = document.getElementById("hud");
+const scoreEl      = document.getElementById("scoreVal");
+const comboEl      = document.getElementById("comboVal");
+const statusTextEl = document.getElementById("statusText");
+const trackDotEl   = document.getElementById("trackDot");
+const calibRing    = document.getElementById("calibRing");
+const hitFlash     = document.getElementById("hitFlash");
+const toastZone    = document.getElementById("toastZone");
+const scanlines    = document.getElementById("scanlines");
+const gameOverEl   = document.getElementById("gameOver");
+const getTimerEl   = () => document.getElementById("timerVal");
+
+let running      = false;
+let gameActive   = false;
+let calibrated   = false;
+let calibrating  = false;
+let tracking     = false;
+let score        = 0;
+let combo        = 0;
+let maxCombo     = 0;
+let smoothX      = 0;
+let smoothY      = 0;
+let velX         = 0;
+let velY         = 0;
+let lostFrames   = 0;
+let trail        = [];
+let lastHitTime  = 0;
+let calibTimer   = 0;
+let paused       = false;
+
+const GAME_DURATION = 3 * 60;
+let timeLeft     = GAME_DURATION;
+let timerHandle  = null;
+let gameStartTS  = 0;
+
+let tHue = 0, tSat = 0, tVal = 0;
+let tHueSpread = 0, tSatSpread = 0, tValSpread = 0;
+let predVX = 0, predVY = 0;
+let lastCX = 0, lastCY = 0;
+
+let facing      = "environment";
+let activeStream = null;
+let mirror      = false;
+let procScale   = 1;
+const isMobile  = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+let wakeLock = null;
+async function requestWakeLock() {
+    try {
+        if ("wakeLock" in navigator) {
+            wakeLock = await navigator.wakeLock.request("screen");
+            wakeLock.addEventListener("release", () => { wakeLock = null; });
+        }
+    } catch (e) { }
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && running && !wakeLock) requestWakeLock();
+});
+
+let cursorColor  = "#00ffcc";
+let cursorColorR = "0,255,204";
+
+const CURSOR_PALETTES = [
+    { hex: "#00ffcc", rgb: "0,255,204"  },
+    { hex: "#ff3e6c", rgb: "255,62,108" },
+    { hex: "#ffe000", rgb: "255,224,0"  },
+    { hex: "#7c3aff", rgb: "124,58,255" },
+    { hex: "#ff8c00", rgb: "255,140,0"  },
+    { hex: "#00cfff", rgb: "0,207,255"  },
+];
+
+function randomCursorColor() {
+    const c = CURSOR_PALETTES[Math.floor(Math.random() * CURSOR_PALETTES.length)];
+    cursorColor  = c.hex;
+    cursorColorR = c.rgb;
+    document.documentElement.style.setProperty("--accent", c.hex);
+}
+
+const CFG = {
+    hueRange    : 38,
+    satMin      : 15,
+    satDelta    : 60,
+    valMin      : 10,
+    roiBase     : 340,
+    roiSpeedMul : 5,
+    lostMax     : 20,
+    swingMinSpeed: 8,
+    swingMinDist : 55,
+    linearity   : 0.44,
+    cooldown    : 320,
+    minPixels   : 6,
+    lerpFast    : 0.82,
+    lerpSlow    : 0.50,
+    hueTolMin   : 14,
+    hueTolMax   : 46,
+    satTolMin   : 28,
+    valTolMin   : 28,
+    spreadMul   : 2.6,
+    scoreMin    : 0.25,
+    trimFrac    : 0.18,
+    adaptRate   : 0.04,
+    predLead    : 0.6,
+};
+
+const hsv = { h: 0, s: 0, v: 0 };
+
+const HISTORY_KEY = "motionswing_history";
+
+function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+    catch { return []; }
+}
+
+function saveRound(scoreVal, comboVal, durationSec) {
+    const hist = loadHistory();
+    hist.unshift({
+        score: scoreVal,
+        combo: comboVal,
+        duration: durationSec,
+        date: new Date().toLocaleString("th-TH", { dateStyle:"short", timeStyle:"short" })
+    });
+    if (hist.length > 50) hist.length = 50;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+}
+
+function getRankLabel(scoreVal, allScores) {
+    if (allScores.length < 2) return "";
+    const sorted = [...allScores].sort((a,b) => b - a);
+    const rank   = sorted.indexOf(scoreVal) + 1;
+    if (rank === 1) return "🥇 อันดับ 1 ตลอดกาล!";
+    if (rank === 2) return "🥈 อันดับ 2";
+    if (rank === 3) return "🥉 อันดับ 3";
+    return `อันดับ ${rank}`;
+}
+
+function startTimer() {
+    timeLeft    = GAME_DURATION;
+    gameStartTS = Date.now();
+    updateTimerDisplay();
+    timerHandle = setInterval(() => {
+        timeLeft--;
+        updateTimerDisplay();
+        if (timeLeft <= 0) endGame();
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerHandle);
+    timerHandle = null;
+}
+
+function updateTimerDisplay() {
+    const el = getTimerEl();
+    if (!el) return;
+    const m = Math.floor(timeLeft / 60).toString().padStart(2, "0");
+    const s = (timeLeft % 60).toString().padStart(2, "0");
+    el.textContent = `${m}:${s}`;
+    el.className   = "";
+    if (timeLeft <= 30) el.classList.add("danger");
+    else if (timeLeft <= 60) el.classList.add("warn");
+}
+
+function endGame() {
+    stopTimer();
+    gameActive = false;
+
+    const elapsed = Math.round((Date.now() - gameStartTS) / 1000);
+    saveRound(score, maxCombo, elapsed);
+
+    const hist   = loadHistory();
+    const scores = hist.map(h => h.score);
+    const rank   = getRankLabel(score, scores);
+
+    document.getElementById("goScoreNum").textContent = score;
+    document.getElementById("goComboNum").textContent = "×" + maxCombo;
+    document.getElementById("goRank").textContent     = rank;
+    gameOverEl.classList.add("show");
+}
+
+function replayGame() {
+    gameOverEl.classList.remove("show");
+    score      = 0;
+    combo      = 0;
+    maxCombo   = 0;
+    trail      = [];
+    tracking   = false;
+    lostFrames = 0;
+    velX = velY = 0;
+    smoothX = smoothY = 0;
+    scoreEl.textContent = "0";
+    comboEl.textContent = "×0";
+    comboEl.classList.remove("hot");
+    const tv = getTimerEl();
+    if (tv) { tv.textContent = "03:00"; tv.className = ""; }
+
+    calibrated = false;
+    gameActive = false;
+    setStatus("lost", "ล็อกสีใหม่เพื่อเริ่ม");
+    document.documentElement.style.setProperty("--accent", "#00ffcc");
+    cursorColor  = "#00ffcc";
+    cursorColorR = "0,255,204";
+
+    showToast("กด LOCK COLOR เพื่อล็อกสีแล้วเริ่มเกมใหม่");
+}
+
+document.getElementById("replayBtn").addEventListener("click", replayGame);
+
+async function startCamera(wantFacing) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("ไม่พบการรองรับกล้องบนเบราว์เซอร์นี้");
+        return false;
+    }
+    if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+
+    facing = wantFacing || facing;
+    mirror = (facing === "user");
+
+    const ideal = isMobile ? { w: 960, h: 720 } : { w: 1280, h: 720 };
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width:  { ideal: ideal.w },
+                height: { ideal: ideal.h },
+                facingMode: { ideal: facing }
+            },
+            audio: false
+        });
+        activeStream = stream;
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+        video.classList.toggle("mirror", mirror);
+
+        await new Promise(res => {
+            if (video.readyState >= 1) return res();
+            video.onloadedmetadata = () => res();
+        });
+        await video.play().catch(() => {});
+
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const longSide = Math.max(vw, vh);
+        procScale = isMobile ? Math.max(1, Math.round(longSide / 480)) : 1;
+        const pw = Math.round(vw / procScale), ph = Math.round(vh / procScale);
+
+        gameCanvas.width  = pw;  gameCanvas.height = ph;
+        hiddenCanvas.width = pw; hiddenCanvas.height = ph;
+
+        video.style.display  = "block";
+        splash.style.display = "none";
+        hud.classList.add("visible");
+        scanlines.classList.add("show");
+        document.querySelectorAll(".corner").forEach(c => c.classList.add("show"));
+
+        if (!running) { running = true; requestAnimationFrame(loop); }
+        requestWakeLock();
+        showToast("กล้องพร้อม — กด LOCK COLOR เพื่อเริ่ม");
+        return true;
+    } catch (err) {
+        if (facing === "environment") {
+            return startCamera("user");
+        }
+        alert("Camera error: " + err.name);
+        return false;
+    }
+}
+
+document.getElementById("startBtn").addEventListener("click", () => {
+    startCamera(isMobile ? "environment" : "user");
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const fb = document.getElementById("flipBtn");
+    if (fb) fb.addEventListener("click", () => {
+        startCamera(facing === "user" ? "environment" : "user");
+    });
+});
+
+document.getElementById("calibBtn").addEventListener("click", () => {
+    if (!running) return;
+    calibrating = true;
+    calibTimer  = Date.now();
+    calibRing.classList.add("visible");
+    showToast("จับวัตถุกลางวงแหวน รอ 2 วิ…");
+});
+
+function hueDist(a, b) {
+    let d = Math.abs(a - b);
+    return d > 180 ? 360 - d : d;
+}
+
+function median(arr) {
+    arr.sort((p, q) => p - q);
+    const n = arr.length, m = n >> 1;
+    return n % 2 ? arr[m] : (arr[m - 1] + arr[m]) * 0.5;
+}
+
+function hueMean(hues) {
+    let c = 0, s = 0;
+    for (const h of hues) { const r = h * Math.PI / 180; c += Math.cos(r); s += Math.sin(r); }
+    let a = Math.atan2(s, c) * 180 / Math.PI;
+    return a < 0 ? a + 360 : a;
+}
+
+function colorScore(h, s, v) {
+    const hd = hueDist(h, tHue);
+    if (hd > tHueSpread) return 0;
+    if (s < CFG.satMin)  return 0;
+    const sd = Math.abs(s - tSat);
+    const vd = Math.abs(v - tVal);
+    if (sd > tSatSpread || vd > tValSpread) return 0;
+    const hScore = 1 - hd / tHueSpread;
+    const sScore = 1 - sd / tSatSpread;
+    const vScore = 1 - vd / tValSpread;
+    return hScore * 0.6 + sScore * 0.28 + vScore * 0.12;
+}
+
+function runCalibration(data, vw, vh) {
+    const cx = Math.floor(vw / 2), cy = Math.floor(vh / 2), half = 45;
+    const hs = [], ss = [], vs = [], vib = [];
+    for (let y = cy - half; y <= cy + half; y++) {
+        if (y < 0 || y >= vh) continue;
+        for (let x = cx - half; x <= cx + half; x++) {
+            if (x < 0 || x >= vw) continue;
+            const i = (y * vw + x) * 4;
+            rgbToHsv(data[i], data[i+1], data[i+2]);
+            if (hsv.s > 10 && hsv.v > 10) {
+                hs.push(hsv.h); ss.push(hsv.s); vs.push(hsv.v);
+                vib.push(hsv.s * hsv.v);
+            }
+        }
+    }
+    calibrating = false;
+    calibRing.classList.remove("visible");
+
+    if (hs.length > 8) {
+        const order = vib.map((vv, i) => [vv, i]).sort((a, b) => b[0] - a[0]);
+        const take = Math.max(8, Math.floor(order.length * 0.6));
+        const selH = [], selS = [], selV = [];
+        for (let k = 0; k < take; k++) {
+            const i = order[k][1];
+            selH.push(hs[i]); selS.push(ss[i]); selV.push(vs[i]);
+        }
+
+        tHue = hueMean(selH);
+        tSat = median(selS.slice());
+        tVal = median(selV.slice());
+
+        const hueDevs = selH.map(h => hueDist(h, tHue));
+        const satDevs = selS.map(s => Math.abs(s - tSat));
+        const valDevs = selV.map(v => Math.abs(v - tVal));
+        const hMad = median(hueDevs) || 6;
+        const sMad = median(satDevs) || 12;
+        const vMad = median(valDevs) || 12;
+
+        tHueSpread = Math.min(CFG.hueTolMax, Math.max(CFG.hueTolMin, hMad * CFG.spreadMul));
+        tSatSpread = Math.max(CFG.satTolMin, sMad * CFG.spreadMul + 18);
+        tValSpread = Math.max(CFG.valTolMin, vMad * CFG.spreadMul + 18);
+
+        calibrated = true; tracking = false;
+        lostFrames = 0; trail = [];
+        velX = velY = smoothX = smoothY = 0;
+        predVX = predVY = 0;
+
+        randomCursorColor();
+        setStatus("lost", "กำลังหาวัตถุ...");
+
+        if (!gameActive) {
+            gameActive = true;
+            score = 0; combo = 0; maxCombo = 0;
+            scoreEl.textContent = "0";
+            comboEl.textContent = "×0";
+            stopTimer();
+            startTimer();
+            showToast("ล็อกสำเร็จ! เริ่มนับเวลา 3 นาที!");
+        } else {
+            showToast("ล็อกสีใหม่สำเร็จ!");
+        }
+    } else {
+        showToast("ล็อกไม่ได้ — ลองวัตถุสีสดกว่านี้");
+    }
+}
+
+let lastTS = 0;
+
+function loop(ts) {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    if (paused) return;
+    const dt = ts - lastTS;
+    lastTS = ts;
+
+    const vw = gameCanvas.width, vh = gameCanvas.height;
+
+    hCtx.drawImage(video, 0, 0, vw, vh);
+    const frame = hCtx.getImageData(0, 0, vw, vh);
+    const data  = frame.data;
+
+    if (mirror) {
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, -vw, 0, vw, vh);
+        ctx.restore();
+    } else {
+        ctx.drawImage(video, 0, 0, vw, vh);
+    }
+
+    if (calibrating) {
+        const elapsed = Date.now() - calibTimer;
+        if (elapsed < 2000) {
+            return;
+        }
+        runCalibration(data, vw, vh);
+        return;
+    }
+
+    if (!calibrated) return;
+
+    const speed = trailSpeed();
+
+    let sX = 0, sY = 0, eX = vw, eY = vh, step = 5;
+    if (tracking && lostFrames < 4) {
+        const rawX = mirror ? (vw - smoothX) : smoothX;
+        const leadX = (mirror ? -predVX : predVX) * CFG.predLead;
+        const leadY = predVY * CFG.predLead;
+        const cxr = rawX + leadX;
+        const cyr = smoothY + leadY;
+        const roi = CFG.roiBase + speed * CFG.roiSpeedMul;
+        sX = Math.max(0, Math.floor(cxr - roi));
+        eX = Math.min(vw, Math.floor(cxr + roi));
+        sY = Math.max(0, Math.floor(cyr - roi));
+        eY = Math.min(vh, Math.floor(cyr + roi));
+        step = 2;
+    }
+
+    let sumX = 0, sumY = 0, wSum = 0, pixCount = 0;
+    let sHue = 0, sSat = 0, sVal = 0;
+    const samples = [];
+    for (let y = sY; y < eY; y += step) {
+        for (let x = sX; x < eX; x += step) {
+            const idx = (y * vw + x) * 4;
+            rgbToHsv(data[idx], data[idx+1], data[idx+2]);
+            const w = colorScore(hsv.h, hsv.s, hsv.v);
+            if (w >= CFG.scoreMin) {
+                sumX += x * w; sumY += y * w; wSum += w; pixCount++;
+                sHue += hsv.h; sSat += hsv.s; sVal += hsv.v;
+                samples.push(x, y, w);
+            }
+        }
+    }
+
+    let found = pixCount >= CFG.minPixels && wSum > 0;
+    let rawCX = 0, rawCY = 0;
+
+    if (found) {
+        let mx = sumX / wSum, my = sumY / wSum;
+
+        let dists = [];
+        for (let k = 0; k < samples.length; k += 3) {
+            const dx = samples[k] - mx, dy = samples[k+1] - my;
+            dists.push(Math.sqrt(dx*dx + dy*dy));
+        }
+        const dSorted = dists.slice().sort((a, b) => a - b);
+        const cutIdx = Math.floor(dSorted.length * (1 - CFG.trimFrac));
+        const cutDist = dSorted[Math.min(cutIdx, dSorted.length - 1)] || Infinity;
+
+        let sx2 = 0, sy2 = 0, w2 = 0, kept = 0;
+        for (let k = 0, di = 0; k < samples.length; k += 3, di++) {
+            if (dists[di] <= cutDist) {
+                const w = samples[k+2];
+                sx2 += samples[k] * w; sy2 += samples[k+1] * w; w2 += w; kept++;
+            }
+        }
+        if (w2 > 0 && kept >= CFG.minPixels) { mx = sx2 / w2; my = sy2 / w2; }
+
+        rawCX = mx; rawCY = my;
+        pixCount = kept || pixCount;
+
+        const aHue = sHue / (samples.length / 3);
+        const aSat = sSat / (samples.length / 3);
+        const aVal = sVal / (samples.length / 3);
+        let hDelta = aHue - tHue;
+        if (hDelta > 180) hDelta -= 360; else if (hDelta < -180) hDelta += 360;
+        tHue = (tHue + hDelta * CFG.adaptRate + 360) % 360;
+        tSat += (aSat - tSat) * CFG.adaptRate;
+        tVal += (aVal - tVal) * CFG.adaptRate;
+    }
+
+    if (found) {
+        const targetX = mirror ? (vw - rawCX) : rawCX;
+        const targetY = rawCY;
+
+        if (!tracking) {
+            smoothX = targetX; smoothY = targetY;
+            velX = velY = 0;
+            predVX = predVY = 0;
+            tracking = true; trail = [];
+        } else {
+            const errX = targetX - smoothX, errY = targetY - smoothY;
+            const dist = Math.hypot(errX, errY);
+            const lerpT = dist > 80 ? CFG.lerpFast
+                : CFG.lerpSlow + (dist / 80) * (CFG.lerpFast - CFG.lerpSlow);
+            velX = velX * 0.5 + errX * lerpT;
+            velY = velY * 0.5 + errY * lerpT;
+            smoothX += velX; smoothY += velY;
+            predVX = predVX * 0.6 + (smoothX - lastCX) * 0.4;
+            predVY = predVY * 0.6 + (smoothY - lastCY) * 0.4;
+        }
+        lastCX = smoothX; lastCY = smoothY;
+        lostFrames = 0;
+        setStatus("on", "Tracking");
+
+        if (trail.length > 1) {
+            for (let i = 1; i < trail.length; i++) {
+                const age = i / trail.length;
+                ctx.beginPath();
+                ctx.moveTo(trail[i-1].x, trail[i-1].y);
+                ctx.lineTo(trail[i].x,   trail[i].y);
+                ctx.strokeStyle = `rgba(${cursorColorR},${(age*0.55).toFixed(2)})`;
+                ctx.lineWidth   = age * 5 + 1;
+                ctx.lineCap     = "round";
+                ctx.stroke();
+            }
+        }
+
+        trail.push({ x: smoothX, y: smoothY, t: Date.now() });
+        if (trail.length > 20) trail.shift();
+
+        const sz  = Math.max(12, Math.min(32, Math.sqrt(pixCount) * 1.6));
+        const grd = ctx.createRadialGradient(smoothX, smoothY, sz*0.3, smoothX, smoothY, sz*2.2);
+        grd.addColorStop(0, `rgba(${cursorColorR},0.18)`);
+        grd.addColorStop(1, `rgba(${cursorColorR},0)`);
+        ctx.beginPath(); ctx.arc(smoothX, smoothY, sz*2.2, 0, Math.PI*2);
+        ctx.fillStyle = grd; ctx.fill();
+
+        ctx.beginPath(); ctx.arc(smoothX, smoothY, sz, 0, Math.PI*2);
+        ctx.strokeStyle = cursorColor; ctx.lineWidth = 2.5; ctx.stroke();
+
+        ctx.beginPath(); ctx.arc(smoothX, smoothY, 5, 0, Math.PI*2);
+        ctx.fillStyle = cursorColor; ctx.fill();
+
+        if (gameActive) checkSwing(speed);
+
+    } else {
+        lostFrames++;
+        predVX *= 0.7; predVY *= 0.7;
+        if (lostFrames > CFG.lostMax) {
+            tracking = false; velX = velY = 0;
+            predVX = predVY = 0;
+            combo = 0;
+            comboEl.textContent = "×0"; comboEl.classList.remove("hot");
+            setStatus("lost", "กำลังหาวัตถุ...");
+        }
+    }
+}
+
+function checkSwing(curSpeed) {
+    if (trail.length < 4) return;
+
+    let pathLen = 0;
+    for (let i = 1; i < trail.length; i++)
+        pathLen += Math.hypot(trail[i].x - trail[i-1].x, trail[i].y - trail[i-1].y);
+
+    const dt       = trail[trail.length-1].t - trail[0].t;
+    const avgSpeed = dt > 0 ? (pathLen / dt) * 16 : 0;
+    const netDist  = Math.hypot(trail[trail.length-1].x - trail[0].x, trail[trail.length-1].y - trail[0].y);
+    const linearity = pathLen > 0 ? netDist / pathLen : 0;
+
+    const now = Date.now();
+    if (avgSpeed > CFG.swingMinSpeed && pathLen > CFG.swingMinDist &&
+        linearity > CFG.linearity && now - lastHitTime > CFG.cooldown) {
+        lastHitTime = now;
+        score++;
+        combo++;
+        if (combo > maxCombo) maxCombo = combo;
+        scoreEl.textContent = score;
+        comboEl.textContent = "×" + combo;
+        comboEl.classList.remove("hot"); void comboEl.offsetWidth; comboEl.classList.add("hot");
+        hitFlash.classList.remove("flash"); void hitFlash.offsetWidth; hitFlash.classList.add("flash");
+        spawnBurst(smoothX, smoothY);
+        showToast(combo >= 5 ? "🔥 COMBO ×" + combo + "!" : "HIT! ×" + combo);
+        trail = [];
+    }
+}
+
+let particles = [];
+
+function spawnBurst(x, y) {
+    for (let i = 0; i < 14; i++) {
+        const angle = (Math.PI * 2 * i) / 14 + (Math.random() - 0.5) * 0.4;
+        const spd   = 4 + Math.random() * 8;
+        particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd,
+            life: 1.0, decay: 0.055 + Math.random() * 0.03 });
+    }
+}
+
+(function particleLoop() {
+    requestAnimationFrame(particleLoop);
+    if (particles.length === 0) return;
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life -= p.decay;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${cursorColorR},${p.life.toFixed(2)})`;
+        ctx.fill();
+    }
+})();
+
+function trailSpeed() {
+    if (trail.length < 2) return 0;
+    return Math.hypot(trail[trail.length-1].x - trail[0].x,
+                      trail[trail.length-1].y - trail[0].y) / trail.length;
+}
+
+function setStatus(state, text) {
+    statusTextEl.textContent = text;
+    trackDotEl.className = "";
+    if (state === "on")   trackDotEl.classList.add("on");
+    if (state === "lost") trackDotEl.classList.add("lost");
+}
+
+function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+    hsv.v = max * 100;
+    hsv.s = max === 0 ? 0 : (d / max) * 100;
+    if (d === 0) { hsv.h = 0; return; }
+    switch (max) {
+        case r: hsv.h = ((g-b)/d + (g<b?6:0)) * 60; break;
+        case g: hsv.h = ((b-r)/d + 2) * 60; break;
+        case b: hsv.h = ((r-g)/d + 4) * 60; break;
+    }
+}
+
+function showToast(msg) {
+    const el = document.createElement("div");
+    el.className   = "toast";
+    el.textContent = msg;
+    toastZone.appendChild(el);
+    setTimeout(() => el.remove(), 2900);
+}
+</script>
+</body>
+</html>
